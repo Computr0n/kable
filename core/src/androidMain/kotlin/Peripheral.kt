@@ -5,7 +5,9 @@ import android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
 import android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+import android.bluetooth.BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
 import android.bluetooth.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+import android.util.Log
 import com.benasher44.uuid.uuidFrom
 import com.juul.kable.WriteNotificationDescriptor.Always
 import com.juul.kable.WriteNotificationDescriptor.Never
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
+import kotlin.DeprecationLevel.ERROR
 import kotlin.coroutines.CoroutineContext
 
 private val clientCharacteristicConfigUuid = uuidFrom(CLIENT_CHARACTERISTIC_CONFIG_UUID)
@@ -42,11 +45,19 @@ public actual fun CoroutineScope.peripheral(
     advertisement: Advertisement,
 ): Peripheral = peripheral(advertisement.bluetoothDevice)
 
+@Deprecated(
+    message = "'writeObserveDescriptor' parameter is no longer supported and is handled automatically by 'observe' function.",
+    level = ERROR
+)
 public fun CoroutineScope.peripheral(
     advertisement: Advertisement,
     writeObserveDescriptor: WriteNotificationDescriptor,
 ): Peripheral = peripheral(advertisement.bluetoothDevice, writeObserveDescriptor)
 
+@Deprecated(
+    message = "'writeObserveDescriptor' parameter is no longer supported and is handled automatically by 'observe' function.",
+    level = ERROR
+)
 public fun CoroutineScope.peripheral(
     bluetoothDevice: BluetoothDevice,
     writeObserveDescriptor: WriteNotificationDescriptor = writeNotificationDescriptorDefault,
@@ -205,19 +216,27 @@ public class AndroidPeripheral internal constructor(
 
     public override fun observe(
         characteristic: Characteristic,
-    ): Flow<ByteArray> = observers.acquire(characteristic)
+        mode: ObserveMode,
+    ): Flow<ByteArray> = observers.acquire(characteristic, mode)
 
-    internal suspend fun startNotifications(characteristic: Characteristic) {
+    internal suspend fun startObservation(characteristic: Characteristic) {
         val platformCharacteristic = platformServices.findCharacteristic(characteristic)
         connection
             .bluetoothGatt
             .setCharacteristicNotification(platformCharacteristic.bluetoothGattCharacteristic, true)
 
-        writeConfigDescriptor(platformCharacteristic, ENABLE_NOTIFICATION_VALUE)
+        val properties = platformCharacteristic.bluetoothGattCharacteristic.properties
+        val value = when {
+            properties.supportsNotification -> ENABLE_NOTIFICATION_VALUE
+            properties.supportsIndication -> ENABLE_INDICATION_VALUE
+            else -> error("Characteristic $characteristic does not support observation.")
+        }
+        writeConfigDescriptor(platformCharacteristic, value)
     }
 
-    internal suspend fun stopNotifications(characteristic: Characteristic) {
+    internal suspend fun stopObservation(characteristic: Characteristic) {
         val platformCharacteristic = platformServices.findCharacteristic(characteristic)
+        // todo: Use Characteristic properties to determine if we should stop notify or indicate.
         writeConfigDescriptor(platformCharacteristic, DISABLE_NOTIFICATION_VALUE)
 
         val bluetoothGattCharacteristic = platformCharacteristic.bluetoothGattCharacteristic
@@ -239,9 +258,8 @@ public class AndroidPeripheral internal constructor(
 
         if (bluetoothGattDescriptor != null) {
             write(bluetoothGattDescriptor, value)
-        } else if (writeObserveDescriptor == Always) {
-            val uuid = characteristic.characteristicUuid
-            error("Unable to start observation for characteristic $uuid, config descriptor not found.")
+        } else {
+            Log.w(TAG, "Characteristic ${characteristic.characteristicUuid} is missing config descriptor.")
         }
     }
 

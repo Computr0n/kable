@@ -2,6 +2,7 @@
 
 package com.juul.kable
 
+import com.juul.kable.ObserveMode.Auto
 import com.juul.kable.WriteType.WithoutResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -14,6 +15,12 @@ public expect fun CoroutineScope.peripheral(
 public enum class WriteType {
     WithResponse,
     WithoutResponse,
+}
+
+public enum class ObserveMode {
+    Notify,
+    Indicate,
+    Auto,
 }
 
 @OptIn(ExperimentalStdlibApi::class) // for CancellationException in @Throws
@@ -119,5 +126,6 @@ public interface Peripheral {
      */
     public fun observe(
         characteristic: Characteristic,
+        mode: ObserveMode = Auto,
     ): Flow<ByteArray>
 }

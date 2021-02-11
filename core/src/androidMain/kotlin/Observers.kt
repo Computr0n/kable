@@ -38,11 +38,11 @@ internal class Observers(
     private val observers = HashMap<Characteristic, Int>()
     private val lock = Mutex()
 
-    fun acquire(characteristic: Characteristic) = flow {
+    fun acquire(characteristic: Characteristic, mode: ObserveMode) = flow {
         peripheral.suspendUntilReady()
 
         if (observers.incrementAndGet(characteristic) == 1) {
-            peripheral.startNotifications(characteristic)
+            peripheral.startObservation(characteristic, mode)
         }
 
         try {
@@ -54,7 +54,7 @@ internal class Observers(
         } finally {
             if (observers.decrementAndGet(characteristic) < 1) {
                 try {
-                    peripheral.stopNotifications(characteristic)
+                    peripheral.stopObservation(characteristic)
                 } catch (e: NotReadyException) {
                     // Silently ignore as it is assumed that failure is due to connection drop, in which case Android
                     // will clear the notifications.
@@ -67,7 +67,7 @@ internal class Observers(
     suspend fun rewire() {
         lock.withLock {
             observers.keys.forEach { characteristic ->
-                peripheral.startNotifications(characteristic)
+                peripheral.startObservation(characteristic, mode)
             }
         }
     }

@@ -1,6 +1,7 @@
 package com.juul.kable
 
 /** Mode specifying if config descriptor (0x2902) should be written to when starting/stopping an observation. */
+@Deprecated()
 public enum class WriteNotificationDescriptor {
 
     /**
